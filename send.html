@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneSignal Safe Sender</title>
+  <meta name="theme-color" content="#0d6efd">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #000000, #060f1d);
+      --card-bg: #ffffff;
+      --text-color: #212529;
+    }
+
+    body {
+      padding-top: 30px;
+      background: linear-gradient(135deg, #f0f4f8, #e6e9f0);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text-color);
+    }
+
+    .card {
+      border: none;
+      border-radius: 1rem;
+      background: var(--card-bg);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+
+    .card-header {
+      font-weight: 600;
+      border-radius: 1rem 1rem 0 0 !important;
+      background: var(--primary-gradient);
+    }
+
+    .btn-primary {
+      background: var(--primary-gradient);
+      border: none;
+      padding: 0.6rem;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.92;
+    }
+
+    #imagePreview {
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .list-group-item {
+      border: none;
+      padding: 0.75rem 1rem;
+      border-radius: 0.6rem !important;
+      margin-bottom: 0.5rem;
+      background-color: rgba(13, 110, 253, 0.04);
+    }
+
+    #historyBox {
+      max-height: 300px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    #historyBox::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #historyBox::-webkit-scrollbar-thumb {
+      background: #adb5bd;
+      border-radius: 3px;
+    }
+
+    .form-label {
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+
+    .container {
+      max-width: 1100px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="row g-4">
+      <!-- نموذج الإرسال -->
+      <div class="col-md-5">
+        <div class="card shadow">
+          <div class="card-header text-white">إرسال إشعار</div>
+          <div class="card-body">
+            <form id="notifyForm">
+              <div class="mb-3">
+                <label class="form-label">العنوان</label>
+                <input class="form-control rounded-3" id="title" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">الرسالة</label>
+                <textarea class="form-control rounded-3" id="message" rows="3" required></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">صورة (اختياري)</label>
+                <input type="file" class="form-control rounded-3" id="imageFile" accept="image/*">
+                <img id="imagePreview" class="img-fluid mt-2 d-none">
+              </div>
+              <button type="submit" class="btn btn-primary w-100 rounded-3">إرسال الإشعار</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- سجل الإشعارات -->
+      <div class="col-md-7">
+        <div class="card shadow">
+          <div class="card-header bg-secondary text-white">سجل الإشعارات</div>
+          <div class="card-body p-3">
+            <div id="historyBox" class="list-group"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // تسجيل Service Worker (لو عندك sw.js)
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(console.warn);
+    }
+
+    // Toast
+    const toast = (msg, type = "info") => {
+      const t = document.createElement("div");
+      t.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+      t.style.zIndex = 1055;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    };
+
+    // سجل الإشعارات
+    const historyKey = "notifHistory";
+    let history = JSON.parse(localStorage.getItem(historyKey) || "[]");
+
+    const renderHistory = () => {
+      const box = document.getElementById("historyBox");
+      if (!history.length) {
+        box.innerHTML = '<p class="text-muted text-center py-3">لا توجد إشعارات بعد</p>';
+        return;
+      }
+      box.innerHTML = history
+        .map(({ time, title, body }) =>
+          `<div class="list-group-item">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1">${title}</h6>
+              <small>${new Date(time).toLocaleString("ar-EG")}</small>
+            </div>
+            <p class="mb-1">${body}</p>
+          </div>`
+        )
+        .join("");
+    };
+    renderHistory();
+
+    // معاينة الصورة
+    const imagePreview = document.getElementById("imagePreview");
+    document.getElementById("imageFile").addEventListener("change", function () {
+      const file = this.files[0];
+      if (!file) {
+        imagePreview.classList.add("d-none");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imagePreview.src = e.target.result;
+        imagePreview.classList.remove("d-none");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // إرسال الإشعار
+    document.getElementById("notifyForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const btn = e.target.querySelector("button");
+      const title = document.getElementById("title").value.trim();
+      const message = document.getElementById("message").value.trim();
+      const imageFile = document.getElementById("imageFile").files[0];
+
+      if (!title || !message) {
+        toast("يرجى ملء العنوان والرسالة", "warning");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>جاري الإرسال...`;
+
+      let imageUrl = null;
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("image", imageFile);
+        try {
+          const res = await fetch("https://api.imgbb.com/1/upload?key=7a2772de77491aa8fb9696a1727062bf", {
+            method: "POST",
+            body: fd,
+          });
+          const j = await res.json();
+          if (j.success) {
+            imageUrl = j.data.url;
+          } else {
+            toast("⚠️ فشل رفع الصورة. سيتم الإرسال بدونها.", "warning");
+          }
+        } catch (err) {
+          console.error("Image upload error:", err);
+          toast("⚠️ حدث خطأ أثناء رفع الصورة", "warning");
+        }
+      }
+
+      try {
+        const resp = await fetch("/.netlify/functions/sendNotification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, message, imageUrl }),
+        });
+
+        const result = await resp.json();
+
+        if (result.id) {
+          history.unshift({ time: Date.now(), title, body: message });
+          localStorage.setItem(historyKey, JSON.stringify(history));
+          renderHistory();
+          toast("✅ تم إرسال الإشعار بنجاح", "success");
+          e.target.reset();
+          imagePreview.classList.add("d-none");
+        } else {
+          toast("❌ فشل إرسال الإشعار: " + (result.errors?.[0] || "خطأ غير معروف"), "danger");
+          console.error("OneSignal error:", result);
+        }
+      } catch (err) {
+        console.error("Notification error:", err);
+        toast("❌ حدث خطأ أثناء الإرسال", "danger");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "إرسال الإشعار";
+      }
+    });
+  </script>
+</body>
+</html>
