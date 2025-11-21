@@ -4,7 +4,7 @@
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.js');
 
 // 🟢 2. إعدادات التخزين (نُبقيها لكن ننظّف غير الضروري)
-const CACHE_NAME = 'calamari-complaints-v2'; // غيّر الإصدار علشان يتجدد الكاش
+const CACHE_NAME = 'frawla-complaints-v2'; // غيّر الإصدار علشان يتجدد الكاش
 const urlsToCache = [
   './',
   './index.html',
